@@ -22,7 +22,7 @@ class Arrow():
   def __init__(self, ops):
     self.ops = ops
 
-    self.trainable_weights = sum([op.trainable_weights for op in self.ops], [])
+    self.trainable_weights = sum((op.trainable_weights for op in self.ops), [])
     # these keep their structure.
     self.weights = [op.weights for op in self.ops]
 
@@ -33,14 +33,14 @@ class Arrow():
     outputs = inputs
     for op in self.ops:
       new_states, outputs, side_op = op(new_states, outputs, initialize)
-      side_outputs.update(side_op)
+      side_outputs |= side_op
 
     return new_states, outputs, side_outputs
 
   def init(self):
     all_states = {}
     for op in self.ops:
-      all_states.update(op.init())
+      all_states |= op.init()
     return all_states
 
   def update_statistics(self, stats, update_perc=1.):
@@ -129,9 +129,8 @@ class GRUBlock():
         x @ self.W_update_x + carry @ self.W_update_c + self.b_update)
     reset_t = tf.sigmoid(
         x @ self.W_reset_x + carry @ self.W_reset_c + self.b_reset)
-    new_carry = update_t * carry + (1. - update_t) * tf.tanh(
+    return update_t * carry + (1.0 - update_t) * tf.tanh(
         self.next_x_net(x) + self.next_c_net(reset_t * carry) + self.b_next)
-    return new_carry
 
   def load_weights(self, weights):
     return self.set_weights(weights)
@@ -274,13 +273,13 @@ class StatefulLearner(ArrowOp):
 
       y, side_out_std = self.out_standardizer(y, initialize)
       if initialize:
-        side_outputs[self.pname + "_out_mean"] = side_out_std["out_mean"]
+        side_outputs[f"{self.pname}_out_mean"] = side_out_std["out_mean"]
 
       new_p = y
       if self.is_residual:
         new_p += states[self.pname]
 
-        side_outputs[self.pname + "_delta"] = y
+        side_outputs[f"{self.pname}_delta"] = y
 
       new_states[self.pname] = new_p
 
@@ -302,7 +301,7 @@ class StatefulLearner(ArrowOp):
 
   def update_statistics(self, stats, update_perc=1.):
     if self.pname is not None:
-      in_stats = {"out_mean": stats[self.pname + "_out_mean"]}
+      in_stats = {"out_mean": stats[f"{self.pname}_out_mean"]}
       self.out_standardizer.update_statistics(in_stats, update_perc)
 
   def init(self):
@@ -375,7 +374,7 @@ class ParamUpdate(ArrowOp):
       # We want the output to be zero-centered at the beginning.
       # This is a constant, for now, so it doesn't get trained.
       out_mean = tf.reduce_mean(y)
-      side_outputs[self.pname + "_out_mean"] = out_mean
+      side_outputs[f"{self.pname}_out_mean"] = out_mean
       y -= out_mean
     else:
       y -= self.out_mean
@@ -384,7 +383,7 @@ class ParamUpdate(ArrowOp):
     new_p = y
     if self.is_residual:
       new_p += states[self.pname]
-      side_outputs[self.pname + "_delta"] = y
+      side_outputs[f"{self.pname}_delta"] = y
 
     new_states = copy.copy(states)
     new_states[self.pname] = new_p
@@ -392,8 +391,8 @@ class ParamUpdate(ArrowOp):
     return new_states, inputs, side_outputs
 
   def update_statistics(self, stats, update_perc=1.):
-    u_out_mean = self.out_mean * (1. - update_perc) + \
-        stats[self.pname + "_out_mean"] * update_perc
+    u_out_mean = (self.out_mean * (1.0 - update_perc) +
+                  stats[f"{self.pname}_out_mean"] * update_perc)
     self.out_mean.assign(u_out_mean)
     self.is_initialized = True
 
@@ -474,7 +473,7 @@ class MatMul(ArrowOp):
     self.pname = pname
     self.shape = shape
     self.p_sd = p_sd
-    self.pin_name = pname + "_in"
+    self.pin_name = f"{pname}_in"
 
   def __call__(self, states, inputs, initialize):
     new_states = copy.copy(states)
@@ -493,7 +492,7 @@ class Add(ArrowOp):
     super().__init__()
     self.pname = pname
     self.shape = shape
-    self.pin_name = pname + "_in"
+    self.pin_name = f"{pname}_in"
 
   def __call__(self, states, inputs, initialize):
     new_states = copy.copy(states)
@@ -527,8 +526,9 @@ class Softmax(ArrowOp):
     super().__init__()
 
     self.states_names = [
-        name + "_" + suff for suff in (
-            "inputs", "translated_inputs", "exp_nom", "exp_denom")]
+        f"{name}_{suff}"
+        for suff in ("inputs", "translated_inputs", "exp_nom", "exp_denom")
+    ]
 
   def __call__(self, states, inputs, initialize):
 
@@ -557,8 +557,7 @@ class CrossEntropyLoss(ArrowOp):
     super().__init__()
     self.eps = eps
 
-    self.states_names = [name + "_" + suff for suff in (
-        "x", "targets", "log_in")]
+    self.states_names = [f"{name}_{suff}" for suff in ("x", "targets", "log_in")]
 
   def __call__(self, states, inputs, initialize):
     x, targets = inputs
@@ -581,7 +580,7 @@ class L1Loss(ArrowOp):
   def __init__(self, name):
     super().__init__()
 
-    self.states_names = [name + "_" + suff for suff in ("x", "targets")]
+    self.states_names = [f"{name}_{suff}" for suff in ("x", "targets")]
 
   def __call__(self, states, inputs, initialize):
     x, targets = inputs
@@ -603,7 +602,7 @@ class L2Loss(ArrowOp):
   def __init__(self, name):
     super().__init__()
 
-    self.states_names = [name + "_" + suff for suff in ("x", "targets", "diff")]
+    self.states_names = [f"{name}_{suff}" for suff in ("x", "targets", "diff")]
 
   def __call__(self, states, inputs, initialize):
     x, targets = inputs
@@ -708,15 +707,14 @@ class StandardizeInputsAndStates(ArrowOp):
     return new_states, outputs, side_outputs
 
   def _scaleValues(self, inputs, norm):
-    assert len(norm) == len(inputs), (
-        "Invalid lengths in scaleValues:{} vs {}".format(
-            len(norm), len(inputs)))
+    assert len(norm) == len(
+        inputs), f"Invalid lengths in scaleValues:{len(norm)} vs {len(inputs)}"
     return [p * i for p, i in zip(norm, inputs)]
 
   def _translateValues(self, inputs, mean):
-    assert len(mean) == len(inputs), (
-        "Invalid lengths in translateValues:{} vs {}".format(
-            len(mean), len(inputs)))
+    assert len(mean) == len(
+        inputs
+    ), f"Invalid lengths in translateValues:{len(mean)} vs {len(inputs)}"
     # we use + cause we compute the mean zerorer..
     return [p + i for p, i in zip(mean, inputs)]
 

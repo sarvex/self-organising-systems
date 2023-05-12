@@ -33,8 +33,7 @@ class StyleModel:
   @tf.function
   def __call__(self, x):
     gs, content = self.calc_style_content(x)
-    sl = tf.reduce_mean(self.style_loss(gs, self.target_style))
-    return sl
+    return tf.reduce_mean(self.style_loss(gs, self.target_style))
 
   @tf.function
   def style_loss(self, a, b):
@@ -56,9 +55,9 @@ class Inception:
     del self.graph_def.node[avgpool0_idx:]
     # use pre_relu layers for Concat nodes
     node = {n.name:n for n in self.graph_def.node}[layer]
-    self.outputs = [layer+':0']
+    self.outputs = [f'{layer}:0']
     if 'Concat' in node.op:
-      self.outputs = [inp+'_pre_relu:0' for inp in node.input[1:]]
+      self.outputs = [f'{inp}_pre_relu:0' for inp in node.input[1:]]
   
   @tf.function
   def __call__(self, x):

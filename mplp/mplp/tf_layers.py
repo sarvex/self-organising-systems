@@ -127,8 +127,8 @@ class MPDense(MPLayer):
     self.b_name = "b"
 
     W_name = self.W_name
-    W_b_name = W_name + "_b"
-    W_in_name = W_name + "_in"
+    W_b_name = f"{W_name}_b"
+    W_in_name = f"{W_name}_in"
     W_states = [W_b_name, W_in_name]
     W_in_dim = len(W_states) + message_size
     cname = "all_W_in"
@@ -195,8 +195,8 @@ class MPDense(MPLayer):
     self.W_bw_arrow = Arrow(W_bw_ops)
 
     b_name = self.b_name
-    b_b_name = b_name + "_b"
-    b_in_name = b_name + "_in"
+    b_b_name = f"{b_name}_b"
+    b_in_name = f"{b_name}_in"
     b_states = [b_b_name, b_in_name]
     b_in_dim = len(b_states) + message_size
     cname = "all_b_in"
@@ -258,8 +258,8 @@ class MPDense(MPLayer):
 
     # these are flattened because they need to be sent to an optimizer.
     self.trainable_weights = self.W_fw_arrow.trainable_weights + \
-        self.W_bw_arrow.trainable_weights + \
-        self.b_fw_arrow.trainable_weights + self.b_bw_arrow.trainable_weights
+          self.W_bw_arrow.trainable_weights + \
+          self.b_fw_arrow.trainable_weights + self.b_bw_arrow.trainable_weights
     # these keep their structure.
     self.weights = [self.W_fw_arrow.weights, self.W_bw_arrow.weights,
         self.b_fw_arrow.weights, self.b_bw_arrow.weights]
@@ -300,12 +300,12 @@ class MPDense(MPLayer):
     W_states = {self.W_name: W}
     new_states, result, _ = self.W_fw_arrow(W_states, inputs, False)
     # unpack states
-    last_W_in = new_states[self.W_name + "_in"]
+    last_W_in = new_states[f"{self.W_name}_in"]
 
     b_states = {self.b_name: b}
     new_states, result, _ = self.b_fw_arrow(b_states, result, False)
     # unpack states
-    last_b_in = new_states[self.b_name + "_in"]
+    last_b_in = new_states[f"{self.b_name}_in"]
 
     side_outputs = (last_W_in, last_b_in)
 
@@ -325,31 +325,31 @@ class MPDense(MPLayer):
 
     ### BIAS
     # prepare input for graph compatibility
-    b_states = {self.b_name: b, self.b_name + "_in": last_b_in}
+    b_states = {self.b_name: b, f"{self.b_name}_in": last_b_in}
     if self.stateful:
       b_states[self.b_cname] = fw_params[3]
 
     new_b_states, m_b, side_out_b = self.b_bw_arrow(b_states, m_in, initialize)
     # unpack
     new_b = new_b_states[self.b_name]
-    delta_b = side_out_b[self.b_name + "_delta"]
+    delta_b = side_out_b[f"{self.b_name}_delta"]
     if initialize:
-      b_out_mean = side_out_b[self.b_name + "_out_mean"]
+      b_out_mean = side_out_b[f"{self.b_name}_out_mean"]
       b_in_mean = side_out_b["inputs_mean"]
       b_in_norm = side_out_b["inputs_norm"]
 
     ### KERNEL
     # prepare input for graph compatibility
-    W_states = {self.W_name: W, self.W_name + "_in": last_W_in}
+    W_states = {self.W_name: W, f"{self.W_name}_in": last_W_in}
     if self.stateful:
       W_states[self.W_cname] = fw_params[2]
 
     new_W_states, m_W, side_out_W = self.W_bw_arrow(W_states, m_b, initialize)
     # unpack
     new_W = new_W_states[self.W_name]
-    delta_W = side_out_W[self.W_name + "_delta"]
+    delta_W = side_out_W[f"{self.W_name}_delta"]
     if initialize:
-      W_out_mean = side_out_W[self.W_name + "_out_mean"]
+      W_out_mean = side_out_W[f"{self.W_name}_out_mean"]
       W_in_mean = side_out_W["inputs_mean"]
       W_in_norm = side_out_W["inputs_norm"]
 
@@ -371,12 +371,18 @@ class MPDense(MPLayer):
     (W_out_mean, W_in_mean, W_in_norm,
      b_out_mean, b_in_mean, b_in_norm) = stats
 
-    W_stats = {self.W_name + "_out_mean": W_out_mean,
-               "inputs_mean": W_in_mean, "inputs_norm": W_in_norm}
+    W_stats = {
+        f"{self.W_name}_out_mean": W_out_mean,
+        "inputs_mean": W_in_mean,
+        "inputs_norm": W_in_norm,
+    }
     self.W_bw_arrow.update_statistics(W_stats, update_perc)
 
-    b_stats = {self.b_name + "_out_mean": b_out_mean,
-               "inputs_mean": b_in_mean, "inputs_norm": b_in_norm}
+    b_stats = {
+        f"{self.b_name}_out_mean": b_out_mean,
+        "inputs_mean": b_in_mean,
+        "inputs_norm": b_in_norm,
+    }
     self.b_bw_arrow.update_statistics(b_stats, update_perc)
 
 
@@ -479,10 +485,7 @@ class MPActivation(MPLayer):
       next_carry = new_states[self.carry_name]
       next_params.append(next_carry)
 
-    if initialize:
-      side_outputs = (in_mean, in_norm)
-    else:
-      side_outputs = ()
+    side_outputs = (in_mean, in_norm) if initialize else ()
     return next_params, m_act, side_outputs
 
   def update_statistics(self, stats, update_perc=1.):
@@ -573,7 +576,7 @@ class MPSoftmax(MPLayer):
   def _backward(self, fw_params, m_in, side_inputs, initialize):
     last_in = side_inputs
 
-    states = {k:v for k, v in zip(self.states_names, last_in)}
+    states = dict(zip(self.states_names, last_in))
     if self.stateful:
       states[self.carry_name] = fw_params[0]
 
@@ -588,10 +591,7 @@ class MPSoftmax(MPLayer):
       next_carry = new_states[self.carry_name]
       next_params.append(next_carry)
 
-    if initialize:
-      side_outputs = (in_mean, in_norm)
-    else:
-      side_outputs = ()
+    side_outputs = (in_mean, in_norm) if initialize else ()
     return next_params, m_act, side_outputs
 
   def update_statistics(self, stats, update_perc=1.):
@@ -685,7 +685,7 @@ class MPLoss():
   def _backward(self, params, m_in, side_inputs, initialize):
     last_in = side_inputs
 
-    states = {k:v for k, v in zip(self.states_names, last_in)}
+    states = dict(zip(self.states_names, last_in))
     if self.stateful:
       states[self.carry_name] = params[0]
 
@@ -700,10 +700,7 @@ class MPLoss():
       next_carry = new_states[self.carry_name]
       next_params.append(next_carry)
 
-    if initialize:
-      side_outputs = (in_mean, in_norm)
-    else:
-      side_outputs = ()
+    side_outputs = (in_mean, in_norm) if initialize else ()
     return next_params, m_act, side_outputs
 
   def update_statistics(self, stats, update_perc=1.):
@@ -950,9 +947,9 @@ class MPNetwork():
   def load_weights(self, base_fn):
     """Find the latest checkpoint matching base_fn, and load the weights."""
 
-    matcher = base_fn + "_*.npy"
+    matcher = f"{base_fn}_*.npy"
     filenames = sorted(gfile.glob(matcher), reverse=True)
-    assert len(filenames) > 0, "No files matching {}".format(matcher)
+    assert len(filenames) > 0, f"No files matching {matcher}"
     filename = filenames[0]
 
     # load array
