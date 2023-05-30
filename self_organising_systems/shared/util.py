@@ -54,7 +54,7 @@ def imencode(a, fmt='jpeg'):
 def im2url(a, fmt='jpeg'):
   encoded = imencode(a, fmt)
   base64_byte_string = base64.b64encode(encoded).decode('ascii')
-  return 'data:image/' + fmt.upper() + ';base64,' + base64_byte_string
+  return f'data:image/{fmt.upper()};base64,{base64_byte_string}'
 
 def tile2d(a, w=None):
   a = np.asarray(a)

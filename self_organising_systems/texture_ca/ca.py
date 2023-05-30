@@ -20,8 +20,7 @@ def get_variables(f):
     return g.watched_variables()
 
 def fake_quant(x, min, max):
-  y = tf.quantization.fake_quant_with_min_max_vars(x, min=min, max=max)
-  return y
+  return tf.quantization.fake_quant_with_min_max_vars(x, min=min, max=max)
 
 def fake_param_quant(w):
   bound = tf.stop_gradient(tf.reduce_max(tf.abs(w)))
@@ -46,8 +45,7 @@ def perceive(x, angle=0.0, repeat=True):
   if repeat:
     x = pad_repeat(x, 1)
     pad_mode = 'VALID'
-  y = tf.nn.depthwise_conv2d(x, kernel, [1, 1, 1, 1], pad_mode)
-  return y
+  return tf.nn.depthwise_conv2d(x, kernel, [1, 1, 1, 1], pad_mode)
 
 class DenseLayer:
   def __init__(self, in_n, out_n,

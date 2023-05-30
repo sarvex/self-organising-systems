@@ -49,7 +49,7 @@ def create_loss_model():
   loss_type, loss_params = tcfg.objective.split(':', 1)
   if loss_type == "style":
     texture_fn = loss_params
-    input_texture_path = "%s/%s"%(tcfg.texture_dir, texture_fn)
+    input_texture_path = f"{tcfg.texture_dir}/{texture_fn}"
     loss_model = StyleModel(input_texture_path)
   elif loss_type == "inception":
     layer_name, ch = loss_params.split(':')
@@ -58,7 +58,7 @@ def create_loss_model():
 
 class TextureSynthTrainer:
   def __init__(self, loss_model=None):
-    self.experiment_log_dir = "%s/%s"%(cfg.logdir, cfg.experiment_name)
+    self.experiment_log_dir = f"{cfg.logdir}/{cfg.experiment_name}"
     self.writer = tf.summary.create_file_writer(self.experiment_log_dir)
 
     if loss_model is None:
@@ -68,10 +68,10 @@ class TextureSynthTrainer:
     self.ca = CAModel()
     if tcfg.ancestor_npy:
       self.ancestor_ca = CAModel()
-      ancestor_fn = "%s/%s" % (tcfg.ancestor_dir, tcfg.ancestor_npy)
+      ancestor_fn = f"{tcfg.ancestor_dir}/{tcfg.ancestor_npy}"
       self.ancestor_ca.load_params(ancestor_fn)
       self.ca.load_params(ancestor_fn)
-      logging.info("loaded pre-trained model %s" % tcfg.ancestor_npy)
+      logging.info(f"loaded pre-trained model {tcfg.ancestor_npy}")
     self.loss_log = []
     self.pool = SamplePool(x=self.seed_fn(tcfg.pool_size))
     lr_sched = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
@@ -91,9 +91,9 @@ class TextureSynthTrainer:
         step = self.train_step()
         if step_num%50 == 0 or step_num == tcfg.train_steps:
           self.visualize_batch_tf(step.x0, step.batch.x, step_num)
-          self.ca.save_params("%s/%s.npy" % (cfg.logdir, cfg.experiment_name))
+          self.ca.save_params(f"{cfg.logdir}/{cfg.experiment_name}.npy")
         logging.info('step: %d, log10(loss): %s, loss: %s'%(len(self.loss_log), np.log10(step.loss), step.loss.numpy()))
-      self.save_video("%s/%s.mp4" % (cfg.logdir, cfg.experiment_name), self.ca.embody)
+      self.save_video(f"{cfg.logdir}/{cfg.experiment_name}.mp4", self.ca.embody)
 
   def train_step(self):
     step_num = len(self.loss_log)
@@ -113,7 +113,7 @@ class TextureSynthTrainer:
     iter_n = tf.random.uniform([], tcfg.rollout_len_min, tcfg.rollout_len_max, tf.int32)
     with tf.GradientTape(persistent=False) as g:
       f = self.ca.embody()
-      for i in tf.range(iter_n):
+      for _ in tf.range(iter_n):
         x = f(x)
       loss = self.loss_model(to_rgb(x))
     grads = g.gradient(loss, self.ca.params)
@@ -122,8 +122,7 @@ class TextureSynthTrainer:
     return x, loss
 
   def seed_fn(self, n):
-    states = np.zeros([n, tcfg.img_size, tcfg.img_size, tcfg.channel_n], np.float32)
-    return states
+    return np.zeros([n, tcfg.img_size, tcfg.img_size, tcfg.channel_n], np.float32)
 
   def save_video(self, path, f):
     state = self.seed_fn(1)
